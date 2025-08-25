@@ -1,4 +1,4 @@
-streamlit
-pandas
-gTTS
-pydub
+streamlit==1.29.0
+pandas==2.1.1
+gTTS==2.3.2
+pydub==0.25.1
