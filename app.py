@@ -125,7 +125,6 @@ if st.session_state.current_file:
                         mp3_buf = build_merged_mp3(
                             rows=rows,
                             pause_ms=int(pause_sec * 1000),
-                            row_pause_ms=0,
                             ru_col=0,
                             ru_lang="ru",
                             de_lang="de",
