@@ -36,18 +36,22 @@ if uploaded is not None:
 if st.session_state.uploaded_files:
     st.sidebar.subheader("Ваши файлы")
     for fname in st.session_state.uploaded_files.keys():
-        col1, col2 = st.sidebar.columns([3, 1])
+        st.sidebar.text(fname)
+        open_key = f"open_{fname}"
+        del_key = f"del_{fname}"
+
+        col1, col2 = st.sidebar.columns(2)
         with col1:
-            st.text(fname)
-        with col2:
-            if st.button("Открыть", key=f"open_{fname}"):
+            if st.button("Открыть", key=open_key):
                 st.session_state.current_file = fname
-            if st.button("Удалить", key=f"del_{fname}"):
+        with col2:
+            if st.button("Удалить", key=del_key):
                 st.session_state.uploaded_files.pop(fname, None)
                 st.session_state.selected_rows.pop(fname, None)
                 if st.session_state.current_file == fname:
                     st.session_state.current_file = next(iter(st.session_state.uploaded_files), None)
                 st.success(f"Файл '{fname}' удалён")
+        st.sidebar.markdown("---")
 
 # --- основной рабочий экран ---
 if st.session_state.current_file:
