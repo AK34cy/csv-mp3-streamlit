@@ -86,14 +86,11 @@ if st.session_state.current_file:
     # верхний чекбокс
     st.checkbox("**✅ ВЫБРАТЬ / СНЯТЬ ВСЕ**", key=top_key, on_change=_sync_select_all, args=(file_name, "top"))
 
-    # список с вертикальным скроллом
-    st.markdown("<div style='height:300px; overflow-y:scroll; border:1px solid #ddd; padding:5px;'>", unsafe_allow_html=True)
     new_selected = []
     for i, row in df.iterrows():
         row_text = " | ".join(str(x) for x in row if pd.notna(x))
         if st.checkbox(row_text, key=f"{file_name}_{i}"):
             new_selected.append(i)
-    st.markdown("</div>", unsafe_allow_html=True)
 
     # нижний чекбокс
     st.checkbox("**✅ ВЫБРАТЬ / СНЯТЬ ВСЕ**", key=bottom_key, on_change=_sync_select_all, args=(file_name, "bottom"))
