@@ -5,31 +5,69 @@ from pydub.utils import which
 from sqlalchemy import create_engine
 import os
 from dotenv import load_dotenv
+from db import get_conn, init_db
+from register import register_user
+import bcrypt
 
 st.set_page_config(page_title="Списки слов → MP3", layout="wide")
 st.title("📚 Списки слов → общий MP3")
 
 # --- Подключение к БД ---
-# Локально: загружаем .env
 load_dotenv()
 DB_URL = os.getenv("POSTGRES_URL") or st.secrets.get("POSTGRES_URL")
-
 if not DB_URL:
     st.error("Не найден параметр подключения к БД. Установите POSTGRES_URL в .env или st.secrets")
     st.stop()
 
 engine = create_engine(DB_URL)
+conn = get_conn()
+init_db(conn)
 
 # --- session state ---
+if "user" not in st.session_state:
+    st.session_state.user = None
 if "uploaded_files" not in st.session_state:
-    st.session_state.uploaded_files = {}  # имя файла -> DataFrame
+    st.session_state.uploaded_files = {}
 if "selected_rows" not in st.session_state:
-    st.session_state.selected_rows = {}  # имя файла -> список индексов
+    st.session_state.selected_rows = {}
 if "current_file" not in st.session_state:
     st.session_state.current_file = None
 
+# --- АВТОРИЗАЦИЯ / РЕГИСТРАЦИЯ ---
+if not st.session_state.user:
+    st.subheader("🔑 Вход / Регистрация")
+    tab_login, tab_register = st.tabs(["Вход", "Регистрация"])
+
+    with tab_login:
+        email = st.text_input("Email для входа")
+        password = st.text_input("Пароль", type="password")
+        if st.button("Войти"):
+            from db import get_user_by_email
+            user = get_user_by_email(conn, email.strip().lower())
+            if user and bcrypt.checkpw(password.encode("utf-8"), user["password_hash"].encode("utf-8")):
+                st.session_state.user = user
+                st.success(f"Привет, {user.get('name') or user['email']}!")
+                st.experimental_rerun()
+            else:
+                st.error("Неверный email или пароль")
+
+    with tab_register:
+        email_r = st.text_input("Email для регистрации", key="reg_email")
+        name_r = st.text_input("Имя", key="reg_name")
+        password_r = st.text_input("Пароль", type="password", key="reg_pass")
+        password_repeat_r = st.text_input("Повторите пароль", type="password", key="reg_pass2")
+        if st.button("Зарегистрироваться"):
+            ok, msg, user = register_user(conn, email_r, name_r, password_r, password_repeat_r)
+            if ok:
+                st.session_state.user = user
+                st.success(msg)
+                st.experimental_rerun()
+            else:
+                st.error(msg)
+    st.stop()
+
 # --- Sidebar: управление файлами ---
-st.sidebar.header("📂 Управление файлами")
+st.sidebar.header(f"📂 Ваши файлы ({st.session_state.user['email']})")
 
 # загрузка нового файла
 uploaded = st.sidebar.file_uploader("Загрузите CSV (без заголовков)", type="csv")
