@@ -1,8 +1,14 @@
 import re
-import bcrypt
+import hashlib
 from db import get_user_by_email, create_user
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+def hash_password(password: str) -> str:
+    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+
+def check_password(password: str, stored_hash: str) -> bool:
+    return hash_password(password) == stored_hash
 
 def register_user(conn, email: str, name: str, password: str, password_repeat: str):
     """
@@ -22,6 +28,6 @@ def register_user(conn, email: str, name: str, password: str, password_repeat: s
     if exists:
         return False, "Пользователь с таким email уже существует", None
 
-    pwd_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    pwd_hash = hash_password(password)
     user = create_user(conn, email=email, name=name, password_hash=pwd_hash)
     return True, "Регистрация успешна", user
