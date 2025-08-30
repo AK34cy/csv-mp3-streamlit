@@ -2,10 +2,23 @@ import streamlit as st
 import pandas as pd
 from mp3_generator import build_merged_mp3
 from pydub.utils import which
+from sqlalchemy import create_engine
+import os
+from dotenv import load_dotenv
 
 st.set_page_config(page_title="Списки слов → MP3", layout="wide")
-
 st.title("📚 Списки слов → общий MP3")
+
+# --- Подключение к БД ---
+# Локально: загружаем .env
+load_dotenv()
+DB_URL = os.getenv("POSTGRES_URL") or st.secrets.get("POSTGRES_URL")
+
+if not DB_URL:
+    st.error("Не найден параметр подключения к БД. Установите POSTGRES_URL в .env или st.secrets")
+    st.stop()
+
+engine = create_engine(DB_URL)
 
 # --- session state ---
 if "uploaded_files" not in st.session_state:
