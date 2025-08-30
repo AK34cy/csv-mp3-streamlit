@@ -2,9 +2,8 @@ import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
-import streamlit as st
 
-# --- Подгружаем локальные переменные, если есть ---
+# Загружаем .env
 load_dotenv()
 
 DDL_USERS = """
@@ -30,9 +29,9 @@ CREATE INDEX IF NOT EXISTS idx_user_files_user_id ON user_files(user_id);
 """
 
 def get_conn():
-    url = os.getenv("POSTGRES_URL") or st.secrets.get("POSTGRES_URL")
+    url = os.getenv("POSTGRES_URL")
     if not url:
-        raise RuntimeError("POSTGRES_URL не задан в переменных окружения или st.secrets")
+        raise RuntimeError("POSTGRES_URL не задан в .env")
     if "sslmode" not in url:
         url = url + ("&sslmode=require" if "?" in url else "?sslmode=require")
     conn = psycopg2.connect(url)
