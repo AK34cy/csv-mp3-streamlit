@@ -1,6 +1,11 @@
 import os
 import psycopg2
 from psycopg2.extras import RealDictCursor
+from dotenv import load_dotenv
+import streamlit as st
+
+# --- Подгружаем локальные переменные, если есть ---
+load_dotenv()
 
 DDL_USERS = """
 CREATE TABLE IF NOT EXISTS users (
@@ -17,7 +22,7 @@ CREATE TABLE IF NOT EXISTS user_files (
     id BIGSERIAL PRIMARY KEY,
     user_id BIGINT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     filename TEXT NOT NULL,
-    kind TEXT NOT NULL DEFAULT 'csv', -- csv|mp3|other
+    kind TEXT NOT NULL DEFAULT 'csv',
     data BYTEA NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -25,10 +30,9 @@ CREATE INDEX IF NOT EXISTS idx_user_files_user_id ON user_files(user_id);
 """
 
 def get_conn():
-    url = os.getenv("DATABASE_URL")
+    url = os.getenv("POSTGRES_URL") or st.secrets.get("POSTGRES_URL")
     if not url:
-        raise RuntimeError("DATABASE_URL не задан в переменных окружения")
-    # Render обычно требует SSL
+        raise RuntimeError("POSTGRES_URL не задан в переменных окружения или st.secrets")
     if "sslmode" not in url:
         url = url + ("&sslmode=require" if "?" in url else "?sslmode=require")
     conn = psycopg2.connect(url)
