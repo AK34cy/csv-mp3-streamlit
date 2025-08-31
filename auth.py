@@ -1,56 +1,67 @@
-import streamlit as st
-import bcrypt
-from db import get_user_by_email, create_user
+# auth.py
 import re
+import bcrypt
+import streamlit as st
+from db import get_user_by_email, create_user
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
-
 def login_block():
-    st.header("Авторизация")
+    """Возвращает user dict или None после авторизации/регистрации"""
+    st.sidebar.subheader("🔑 Авторизация")
+    conn = st.session_state.conn
 
-    # Если пользователь уже в сессии
-    if "user" in st.session_state and st.session_state.user:
-        return st.session_state.user
+    if "user" not in st.session_state:
+        st.session_state.user = None
 
-    tab_login, tab_register = st.tabs(["Вход", "Регистрация"])
+    tab_login, tab_reg = st.sidebar.tabs(["Войти", "Регистрация"])
 
+    user = None
     with tab_login:
         email = st.text_input("Email", key="login_email")
-        password = st.text_input("Пароль", type="password", key="login_password")
-
+        password = st.text_input("Пароль", type="password", key="login_pwd")
         if st.button("Войти"):
-            user = get_user_by_email(st.session_state.conn, email.strip().lower())
-            if not user:
-                st.error("Пользователь не найден")
-            else:
-                if bcrypt.checkpw(password.encode("utf-8"), user["password_hash"].encode("utf-8")):
-                    st.session_state.user = user
-                    st.rerun()
+            if email and password:
+                u = get_user_by_email(conn, email.strip().lower())
+                if u and bcrypt.checkpw(password.encode("utf-8"), u["password_hash"].encode("utf-8")):
+                    st.session_state.user = u
+                    st.success(f"Добро пожаловать, {u.get('name') or u['email']}!")
+                    st.experimental_rerun()
                 else:
-                    st.error("Неверный пароль")
-
-    with tab_register:
-        name = st.text_input("Имя", key="reg_name")
+                    st.error("Неверный email или пароль")
+    
+    with tab_reg:
         email = st.text_input("Email", key="reg_email")
-        password = st.text_input("Пароль", type="password", key="reg_password")
-        password_repeat = st.text_input("Повторите пароль", type="password", key="reg_password_repeat")
-
+        name = st.text_input("Имя", key="reg_name")
+        password = st.text_input("Пароль", type="password", key="reg_pwd")
+        password_repeat = st.text_input("Повтор пароля", type="password", key="reg_pwd2")
         if st.button("Зарегистрироваться"):
-            email = email.strip().lower()
-            if not EMAIL_RE.match(email):
-                st.error("Некорректный email")
-            elif len(password) < 6:
-                st.error("Пароль должен быть не короче 6 символов")
-            elif password != password_repeat:
-                st.error("Пароли не совпадают")
-            elif get_user_by_email(st.session_state.conn, email):
-                st.error("Пользователь с таким email уже существует")
-            else:
-                pwd_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
-                user = create_user(st.session_state.conn, email, name.strip(), pwd_hash)
+            ok, msg, user = register_user(conn, email, name, password, password_repeat)
+            if ok:
                 st.session_state.user = user
-                st.success("Регистрация успешна")
-                st.rerun()
+                st.success(msg)
+                st.experimental_rerun()
+            else:
+                st.error(msg)
 
-    return None
+    return st.session_state.user
+
+
+def register_user(conn, email: str, name: str, password: str, password_repeat: str):
+    email = (email or "").strip().lower()
+    name = (name or "").strip()
+
+    if not EMAIL_RE.match(email):
+        return False, "Некорректный email", None
+    if len(password) < 6:
+        return False, "Пароль должен быть не короче 6 символов", None
+    if password != password_repeat:
+        return False, "Пароли не совпадают", None
+
+    exists = get_user_by_email(conn, email)
+    if exists:
+        return False, "Пользователь с таким email уже существует", None
+
+    pwd_hash = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+    user = create_user(conn, email=email, name=name, password_hash=pwd_hash)
+    return True, "Регистрация успешна", user
