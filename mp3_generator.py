@@ -1,14 +1,21 @@
+"""
+mp3_generator.py
+Модуль для генерации MP3-файлов из списка слов с помощью gTTS + pydub.
+"""
+
 from gtts import gTTS
 from pydub import AudioSegment
 from io import BytesIO
 
+
 def _tts_to_segment(text: str, lang: str) -> AudioSegment:
+    """Генерация фрагмента аудио из текста (gTTS → AudioSegment)."""
     buf = BytesIO()
     tts = gTTS(text=text, lang=lang)
     tts.write_to_fp(buf)
     buf.seek(0)
-    seg = AudioSegment.from_file(buf, format="mp3")
-    return seg
+    return AudioSegment.from_file(buf, format="mp3")
+
 
 def build_merged_mp3(
     rows,
@@ -18,21 +25,31 @@ def build_merged_mp3(
     de_lang: str = "de",
     progress_callback=None,
 ):
+    """
+    Создаёт единый MP3-файл из списка слов.
+    rows: список строк (list[list[str]])
+    pause_ms: пауза перед русским словом
+    ru_col: индекс колонки с русским словом
+    ru_lang: язык для русских слов
+    de_lang: язык для иностранных слов
+    progress_callback: функция прогресса (idx, total)
+    """
     track = AudioSegment.silent(duration=0)
     total = len(rows)
-    first_ru_done = False  # флаг для первого русского слова
+    first_ru_done = False
 
     for idx, row in enumerate(rows):
-        cells = [str(c).strip() for c in row if c and str(c).strip().lower() not in ("nan", "none")]
+        cells = [
+            str(c).strip()
+            for c in row
+            if c and str(c).strip().lower() not in ("nan", "none")
+        ]
         if not cells:
             if progress_callback:
-                try: progress_callback(idx)
-                except TypeError:
-                    try: progress_callback(idx, total)
-                    except Exception: pass
+                progress_callback(idx, total)
             continue
 
-        # Русское слово (с паузой перед, кроме первого)
+        # Русское слово
         if 0 <= ru_col < len(cells):
             if first_ru_done:
                 track += AudioSegment.silent(duration=pause_ms)
@@ -42,7 +59,7 @@ def build_merged_mp3(
                 print(f"[WARN] gTTS RU failed for '{cells[ru_col]}': {e}")
             first_ru_done = True
 
-        # Немецкие слова (без пауз)
+        # Остальные слова (например, немецкие)
         for j, text in enumerate(cells):
             if j == ru_col:
                 continue
@@ -52,10 +69,7 @@ def build_merged_mp3(
                 print(f"[WARN] gTTS DE failed for '{text}': {e}")
 
         if progress_callback:
-            try: progress_callback(idx)
-            except TypeError:
-                try: progress_callback(idx, total)
-                except Exception: pass
+            progress_callback(idx, total)
 
     out_buf = BytesIO()
     track.export(out_buf, format="mp3", bitrate="128k")
