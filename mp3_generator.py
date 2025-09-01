@@ -1,4 +1,5 @@
 # mp3_generator.py
+import pandas as pd
 from gtts import gTTS
 from pydub import AudioSegment
 from io import BytesIO
