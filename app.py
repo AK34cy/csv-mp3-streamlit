@@ -25,9 +25,12 @@ if "conn" not in st.session_state:
 
 def main():
     # Авторизация
-    user = login_block()
-    if not user:
-        return
+    if "user" not in st.session_state or st.session_state.user is None:
+        user = login_block()
+        if not user:
+            return
+    else:
+        user = st.session_state.user
 
     # Левая колонка: имя, email, кнопка выйти + работа с файлами
     with st.sidebar:
@@ -39,11 +42,12 @@ def main():
         # Работа с файлами
         file_manager_block(user)
 
-    # Основной правый фрейм
+    # Правый блок
     st.header("Основной блок")
     action = st.radio("Раздел", ["Генератор MP3", "Другой функционал"], index=0)
 
     if action == "Генератор MP3":
+        from db import get_file   # импорт прямо перед использованием
         mp3_generator_block(user)
     else:
         st.info("Выберите раздел")
