@@ -11,7 +11,7 @@ st.set_page_config(page_title="CSV → MP3", layout="wide")
 from db import get_conn, init_db
 from auth import login_block
 from file_manager import file_manager_block
-from mp3_generator import mp3_generator_block  # сюда можно добавить правый фрейм для списков слов
+from mp3_generator import mp3_generator_block
 
 # --- инициализация соединения с БД ---
 if "conn" not in st.session_state:
@@ -23,27 +23,30 @@ if "conn" not in st.session_state:
         st.error(f"Ошибка подключения к БД: {e}")
         st.stop()
 
-# --- проверка авторизации ---
-if "user" not in st.session_state:
-    st.session_state.user = None
+def main():
+    # Авторизация
+    user = login_block()
+    if not user:
+        return
 
-if not st.session_state.user:
-    # вызываем авторизацию
-    st.session_state.user = login_block()
+    # Левая колонка: имя, email, кнопка выйти + работа с файлами
+    with st.sidebar:
+        st.markdown(f"**Пользователь:** {user.get('name') or ''} ({user['email']})")
+        if st.button("Выйти"):
+            st.session_state.user = None
+            st.experimental_rerun()
 
-if st.session_state.user:
-    user = st.session_state.user
+        # Работа с файлами
+        file_manager_block(user)
 
-    # --- Сайдбар (левый фрейм) ---
-    st.sidebar.markdown(f"**Пользователь:** {user.get('name') or user['email']}")
-    if st.sidebar.button("Выйти"):
-        st.session_state.user = None
-        st.experimental_rerun()
+    # Основной правый фрейм
+    st.header("Основной блок")
+    action = st.radio("Раздел", ["Генератор MP3", "Другой функционал"], index=0)
 
-    st.sidebar.subheader("📂 Файлы")
-    file_manager_block(user)  # левый фрейм, работа с файлами
+    if action == "Генератор MP3":
+        mp3_generator_block(user)
+    else:
+        st.info("Выберите раздел")
 
-    # --- Правый фрейм (основной) ---
-    st.subheader("📖 Списки слов / другой контент")
-    # Здесь можно разместить ваши списки слов или функционал генератора MP3
-    mp3_generator_block(user)
+if __name__ == "__main__":
+    main()
