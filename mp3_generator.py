@@ -2,6 +2,7 @@
 from gtts import gTTS
 from pydub import AudioSegment
 from io import BytesIO
+from db import get_file
 import streamlit as st
 
 def _tts_to_segment(text: str, lang: str) -> AudioSegment:
