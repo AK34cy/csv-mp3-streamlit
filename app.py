@@ -26,35 +26,34 @@ if "conn" not in st.session_state:
         st.stop()
 
 def main():
-    # Проверяем, есть ли пользователь в сессии
-    user = st.session_state.get("user")
-
-    if not user:
-        # Форма авторизации появляется только если нет пользователя
-        user = login_block()
-        if not user:
-            return
-        st.session_state.user = user  # сохраняем в сессию
-
-    # --- Левый и правый фреймы ---
+    # Левый и правый фреймы
     left_col, right_col = st.columns([1, 2])
 
     with left_col:
-        # Верхняя панель: имя, email, кнопка выхода
-        st.markdown(f"**Пользователь:** {user.get('name') or '—'} ({user['email']})")
-        if st.button("Выйти"):
-            st.session_state.user = None
-            st.session_state.current_file_id = None
-            st.experimental_rerun()
+        user = st.session_state.get("user")
 
-        # Работа с файлами
-        file_manager_block(user)
+        if user:
+            # Пользователь вошёл — показываем имя, email и кнопку выхода
+            st.markdown(f"**Пользователь:** {user.get('name') or '—'} ({user['email']})")
+            if st.button("Выйти"):
+                st.session_state.user = None
+                st.session_state.current_file_id = None
+                st.experimental_rerun()
+        else:
+            # Пользователь не вошёл — показываем форму авторизации
+            user = login_block()
+            if user:
+                st.session_state.user = user
+                st.experimental_rerun()
+
+        # Работа с файлами доступна только после авторизации
+        if user:
+            file_manager_block(user)
 
     with right_col:
-        # Если выбран файл, показываем его данные
-        current_file_id = st.session_state.get("current_file_id")
-        if current_file_id:
-            file_data = get_file(st.session_state.conn, current_file_id, user["id"])
+        user = st.session_state.get("user")
+        if user and "current_file_id" in st.session_state:
+            file_data = get_file(st.session_state.conn, st.session_state.current_file_id, user["id"])
             if file_data:
                 file_name = file_data['filename']
                 df = pd.read_csv(BytesIO(file_data['data']), header=None).dropna(how="any").reset_index(drop=True)
