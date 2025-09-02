@@ -26,39 +26,39 @@ if "conn" not in st.session_state:
         st.stop()
 
 def main():
-    # Левый и правый фреймы
+    # --- Левый и правый фреймы ---
     left_col, right_col = st.columns([1, 2])
 
     with left_col:
         user = st.session_state.get("user")
-
+        
         if user:
-            # Пользователь вошёл — показываем имя, email и кнопку выхода
+            # Пользователь авторизован
             st.markdown(f"**Пользователь:** {user.get('name') or '—'} ({user['email']})")
             if st.button("Выйти"):
                 st.session_state.user = None
                 st.session_state.current_file_id = None
                 st.experimental_rerun()
+            # Работа с файлами
+            file_manager_block(user)
         else:
-            # Пользователь не вошёл — показываем форму авторизации
-            user = login_block()
-            if user:
-                st.session_state.user = user
+            # Форма авторизации
+            new_user = login_block()
+            if new_user:
+                st.session_state.user = new_user
                 st.experimental_rerun()
 
-        # Работа с файлами доступна только после авторизации
-        if user:
-            file_manager_block(user)
-
     with right_col:
+        # Если выбран файл, показываем его данные и слова
         user = st.session_state.get("user")
-        if user and "current_file_id" in st.session_state:
-            file_data = get_file(st.session_state.conn, st.session_state.current_file_id, user["id"])
+        current_file_id = st.session_state.get("current_file_id")
+        if user and current_file_id:
+            file_data = get_file(st.session_state.conn, current_file_id, user["id"])
             if file_data:
                 file_name = file_data['filename']
                 df = pd.read_csv(BytesIO(file_data['data']), header=None).dropna(how="any").reset_index(drop=True)
 
-                # Список слов + параметры генерации
+                # Список слов + выбор строк
                 pause_sec = render_word_list(file_name, df)
 
                 # Генерация MP3
