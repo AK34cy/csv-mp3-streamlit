@@ -29,19 +29,20 @@ def render_word_list(file_name, df):
 
     st.checkbox("**✅ ВЫБРАТЬ / СНЯТЬ ВСЕ**", key=top_key, on_change=_sync_select_all, args=(file_name, "top"))
 
-    new_selected = []
+    selected_indices = []
     for i, row in df.iterrows():
         row_text = " | ".join(str(x) for x in row if pd.notna(x))
         if st.checkbox(row_text, key=f"{file_name}_{i}"):
-            new_selected.append(i)
+            selected_indices.append(i)
 
     st.checkbox("**✅ ВЫБРАТЬ / СНЯТЬ ВСЕ**", key=bottom_key, on_change=_sync_select_all, args=(file_name, "bottom"))
 
-    st.session_state.selected_rows[file_name] = new_selected
-    st.write(f"Выбрано: {len(new_selected)} строк")
+    st.session_state.selected_rows[file_name] = selected_indices
+    st.write(f"Выбрано: {len(selected_indices)} строк")
 
     # --- параметры генерации ---
     st.subheader("⚙️ Параметры озвучки")
     pause_sec = st.slider("Пауза перед русским словом (кроме первого), сек", 0.0, 5.0, 0.5, 0.1)
 
-    return pause_sec
+    # Возвращаем и паузу, и выбранные строки
+    return pause_sec, selected_indices
