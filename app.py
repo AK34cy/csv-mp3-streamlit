@@ -25,43 +25,45 @@ if "conn" not in st.session_state:
         st.error(f"Ошибка подключения к БД: {e}")
         st.stop()
 
+# --- главный блок ---
 def main():
-    # --- Левый и правый фреймы ---
-    left_col, right_col = st.columns([1, 2])
-
-    with left_col:
+    # --- Левый сайдбар ---
+    with st.sidebar:
         if "user" not in st.session_state or st.session_state.user is None:
             # Форма авторизации
-            user = login_block()
+            user = login_block()  # возвращает dict пользователя или None
             if user:
                 st.session_state.user = user
                 st.experimental_rerun()
         else:
             user = st.session_state.user
-            # Пользователь авторизован
+            # Верхняя панель: имя, email, кнопка выхода
             st.markdown(f"**Пользователь:** {user.get('name') or '—'} ({user['email']})")
             if st.button("Выйти"):
                 st.session_state.user = None
                 st.session_state.current_file_id = None
                 st.experimental_rerun()
+
             # Работа с файлами
             file_manager_block(user)
 
-    with right_col:
-        # Если выбран файл, показываем его данные и слова
-        user = st.session_state.get("user")
-        current_file_id = st.session_state.get("current_file_id")
-        if user and current_file_id:
-            file_data = get_file(st.session_state.conn, current_file_id, user["id"])
-            if file_data:
-                file_name = file_data['filename']
-                df = pd.read_csv(BytesIO(file_data['data']), header=None).dropna(how="any").reset_index(drop=True)
+    # --- Правый фрейм / основной контент ---
+    if "user" in st.session_state and st.session_state.user:
+        user = st.session_state.user
+        right_col = st.container()
+        with right_col:
+            current_file_id = st.session_state.get("current_file_id")
+            if current_file_id:
+                file_data = get_file(st.session_state.conn, current_file_id, user["id"])
+                if file_data:
+                    file_name = file_data['filename']
+                    df = pd.read_csv(BytesIO(file_data['data']), header=None).dropna(how="any").reset_index(drop=True)
 
-                # Список слов + выбор строк
-                pause_sec = render_word_list(file_name, df)
+                    # Список слов + параметры генерации
+                    pause_sec = render_word_list(file_name, df)
 
-                # Генерация MP3
-                mp3_generator_block(user, df, pause_sec)
+                    # Генерация MP3
+                    mp3_generator_block(user, df, pause_sec)
 
 if __name__ == "__main__":
     main()
