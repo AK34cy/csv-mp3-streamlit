@@ -6,10 +6,9 @@ from dotenv import load_dotenv
 
 # локальные модули
 from db import get_conn, init_db, get_file
-from auth import login_block
-from file_manager import file_manager_block
 from mp3_generator import mp3_generator_block
 from word_list_ui import render_word_list
+from sidebar_ui import render_sidebar
 
 # --- инициализация конфигов ---
 load_dotenv()
@@ -29,23 +28,7 @@ if "conn" not in st.session_state:
 def main():
     # --- Левый сайдбар ---
     with st.sidebar:
-        if "user" not in st.session_state or st.session_state.user is None:
-            # Форма авторизации
-            user = login_block()  # возвращает dict пользователя или None
-            if user:
-                st.session_state.user = user
-                st.experimental_rerun()
-        else:
-            user = st.session_state.user
-            # Верхняя панель: имя, email, кнопка выхода
-            st.markdown(f"**Пользователь:** {user.get('name') or '—'} ({user['email']})")
-            if st.button("Выйти"):
-                st.session_state.user = None
-                st.session_state.current_file_id = None
-                st.experimental_rerun()
-
-            # Работа с файлами
-            file_manager_block(user)
+        render_sidebar()
 
     # --- Правый фрейм / основной контент ---
     if "user" in st.session_state and st.session_state.user:
@@ -60,10 +43,14 @@ def main():
                     df = pd.read_csv(BytesIO(file_data['data']), header=None).dropna(how="any").reset_index(drop=True)
 
                     # Список слов + параметры генерации
-                    pause_sec = render_word_list(file_name, df)
+                    pause_sec, selected_indices = render_word_list(file_name, df)
 
-                    # Генерация MP3
-                    mp3_generator_block(user, df, pause_sec)
+                    # Генерация MP3 только для выбранных строк
+                    selected_df = df.loc[selected_indices] if selected_indices else pd.DataFrame()
+                    if not selected_df.empty:
+                        mp3_generator_block(user, selected_df, pause_sec)
+                    else:
+                        st.info("Не выбрано ни одной строки для генерации MP3.")
 
 if __name__ == "__main__":
     main()
