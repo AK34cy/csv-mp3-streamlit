@@ -2,59 +2,74 @@
 import streamlit as st
 import pandas as pd
 from io import BytesIO
+from db import get_file
 from gtts import gTTS
 from pydub import AudioSegment
 
-def build_merged_mp3(df: pd.DataFrame, selected_indices: list[int], pause_sec: float = 0.5):
+def build_merged_mp3(df, selected_indices=None, pause_sec=0.5):
     """
-    Генерация MP3 из выбранных строк DataFrame.
-    Каждая строка df превращается в звук, пауза между строками = pause_sec секунд.
+    Генерация MP3 из DataFrame.
+    selected_indices: список индексов строк для генерации
+    pause_sec: пауза между строками в секундах
     """
+    if selected_indices is None:
+        selected_indices = df.index.tolist()
+
     mp3_combined = AudioSegment.silent(duration=0)
-    selected_rows = df.iloc[selected_indices]
+    for i in selected_indices:
+        row = df.iloc[i]
+        text_ru = []
+        text_de = []
 
-    progress_total = len(selected_rows)
-    progress_bar = st.progress(0)
-
-    for i, row in enumerate(selected_rows.itertuples(index=False), 1):
-        text_parts = []
-        for word in row:
-            if pd.isna(word):
+        # Разделяем по языкам (русский / немецкий) по индексу столбца
+        for idx, cell in enumerate(row):
+            if pd.isna(cell):
                 continue
-            # Простейшее определение языка
-            lang = 'de' if any(ord(c) > 127 for c in str(word)) else 'ru'
-            tts = gTTS(text=str(word), lang=lang)
-            buf = BytesIO()
-            tts.write_to_fp(buf)
-            buf.seek(0)
-            segment = AudioSegment.from_file(buf, format="mp3")
-            text_parts.append(segment)
-        # Объединяем слова строки
-        line_segment = sum(text_parts, AudioSegment.silent(duration=0))
-        mp3_combined += line_segment + AudioSegment.silent(duration=int(pause_sec * 1000))
-        progress_bar.progress(i / progress_total)
+            # Если столбец четный — русское слово, нечетный — немецкое
+            if idx % 2 == 0:
+                text_ru.append(str(cell))
+            else:
+                text_de.append(str(cell))
+
+        # Генерация русского MP3
+        if text_ru:
+            tts_ru = gTTS(text=" ".join(text_ru), lang="ru")
+            buf_ru = BytesIO()
+            tts_ru.write_to_fp(buf_ru)
+            buf_ru.seek(0)
+            seg_ru = AudioSegment.from_file(buf_ru, format="mp3")
+            mp3_combined += seg_ru + AudioSegment.silent(duration=int(pause_sec*1000))
+
+        # Генерация немецкого MP3
+        if text_de:
+            tts_de = gTTS(text=" ".join(text_de), lang="de")
+            buf_de = BytesIO()
+            tts_de.write_to_fp(buf_de)
+            buf_de.seek(0)
+            seg_de = AudioSegment.from_file(buf_de, format="mp3")
+            mp3_combined += seg_de + AudioSegment.silent(duration=int(pause_sec*1000))
 
     out_buf = BytesIO()
     mp3_combined.export(out_buf, format="mp3")
     out_buf.seek(0)
     return out_buf
 
-def mp3_generator_block(user, df: pd.DataFrame, pause_sec: float, selected_indices: list[int]):
+def mp3_generator_block(user, df, pause_sec, selected_indices):
     """
     Streamlit-блок генерации MP3.
-    Требуется выбранный файл и список выбранных индексов строк.
+    df: DataFrame выбранного файла
+    pause_sec: пауза между строками
+    selected_indices: список индексов выбранных строк
     """
     st.subheader("🎧 Генератор MP3")
-    if not selected_indices:
-        st.info("Сначала выберите строки для генерации")
-        return
+    file_name = st.session_state.get("current_file_name", "output")
 
     if st.button("▶️ Сгенерировать MP3"):
-        with st.spinner("Генерация MP3..."):
+        with st.spinner("Генерация..."):
             mp3_buf = build_merged_mp3(df, selected_indices, pause_sec=pause_sec)
-            # Чтобы st.audio корректно воспроизводил буфер
-            mp3_buf.seek(0)
-            st.audio(mp3_buf.read(), format="audio/mp3")
-            # Скачивание
-            mp3_buf.seek(0)
-            st.download_button("💾 Скачать MP3", data=mp3_buf.read(), file_name="output.mp3")
+            st.audio(mp3_buf, format="audio/mp3")
+            st.download_button(
+                "💾 Скачать MP3",
+                data=mp3_buf,
+                file_name=f"{file_name}.mp3"
+            )
