@@ -1,3 +1,4 @@
+# word_list_ui.py
 import streamlit as st
 import pandas as pd
 
@@ -44,5 +45,4 @@ def render_word_list(file_name, df):
     st.subheader("⚙️ Параметры озвучки")
     pause_sec = st.slider("Пауза перед русским словом (кроме первого), сек", 0.0, 5.0, 0.5, 0.1)
 
-    # Возвращаем и паузу, и выбранные строки
     return pause_sec, selected_indices
