@@ -2,55 +2,62 @@
 import streamlit as st
 import pandas as pd
 from io import BytesIO
+from db import get_file
 from gtts import gTTS
 from pydub import AudioSegment
+import time
 
-def build_merged_mp3(df, selected_indices, pause_sec=0.5):
+def build_merged_mp3(df, pause_sec=0.5):
     """
-    Генерация MP3 из DataFrame для выбранных строк.
-    Каждая строка df превращается в звук, пауза между строками = pause_sec секунд.
-    Русские слова озвучиваются на 'ru', немецкие на 'de'.
+    Генерация MP3 из DataFrame с паузой между строками.
+    Автоматически определяет язык: русские слова -> 'ru', немецкие -> 'de'
     """
     mp3_combined = AudioSegment.silent(duration=0)
-    total = len(selected_indices)
+    total = len(df)
+    progress_bar = st.progress(0)
+    
+    for idx, row in enumerate(df.itertuples(index=False), 1):
+        text_parts = [str(x) for x in row if pd.notna(x)]
+        if not text_parts:
+            continue
 
-    for idx, i in enumerate(selected_indices, 1):
-        row = df.iloc[i]
-        row_texts = [str(x) for x in row if pd.notna(x)]
-        for text in row_texts:
-            lang = "ru" if is_russian(text) else "de"
-            tts = gTTS(text=text, lang=lang)
+        # Определение языка каждой части (русская / немецкая)
+        audio_segments = []
+        for part in text_parts:
+            lang = 'de' if any('a' <= c.lower() <= 'z' for c in part) else 'ru'
+            tts = gTTS(text=part, lang=lang)
             buf = BytesIO()
             tts.write_to_fp(buf)
             buf.seek(0)
             segment = AudioSegment.from_file(buf, format="mp3")
-            mp3_combined += segment + AudioSegment.silent(duration=int(pause_sec * 1000))
-        st.progress(idx / total)
+            audio_segments.append(segment)
+            audio_segments.append(AudioSegment.silent(duration=int(pause_sec*1000)))
+
+        # Объединяем все сегменты строки
+        for seg in audio_segments:
+            mp3_combined += seg
+
+        progress_bar.progress(idx / total)
 
     out_buf = BytesIO()
     mp3_combined.export(out_buf, format="mp3")
     out_buf.seek(0)
     return out_buf
 
-def is_russian(text: str) -> bool:
-    """Простая проверка: если есть кириллица, считаем русским"""
-    return any('а' <= c <= 'я' or 'А' <= c <= 'Я' for c in text)
-
-def mp3_generator_block(user, df, pause_sec, selected_indices):
+def mp3_generator_block(user, df, pause_sec=0.5):
     """
     Streamlit-блок генерации MP3.
-    df: полный DataFrame выбранного файла
-    selected_indices: индексы выбранных строк
+    df уже должен содержать только выбранные пользователем строки.
     """
     st.subheader("🎧 Генератор MP3")
 
-    if not selected_indices:
-        st.info("Сначала выберите строки для генерации")
+    if df.empty:
+        st.info("Нет выбранных строк для генерации")
         return
 
     if st.button("▶️ Сгенерировать MP3"):
-        with st.spinner("Генерация..."):
-            mp3_buf = build_merged_mp3(df, selected_indices, pause_sec=pause_sec)
+        with st.spinner("Генерация MP3..."):
+            mp3_buf = build_merged_mp3(df, pause_sec=pause_sec)
             st.audio(mp3_buf, format="audio/mp3")
             st.download_button(
                 "💾 Скачать MP3",
