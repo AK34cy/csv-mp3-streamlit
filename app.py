@@ -6,9 +6,9 @@ from dotenv import load_dotenv
 
 # локальные модули
 from db import get_conn, init_db, get_file
+from sidebar_ui import sidebar_block
 from mp3_generator import mp3_generator_block
 from word_list_ui import render_word_list
-from sidebar_ui import render_sidebar
 
 # --- инициализация конфигов ---
 load_dotenv()
@@ -27,30 +27,29 @@ if "conn" not in st.session_state:
 # --- главный блок ---
 def main():
     # --- Левый сайдбар ---
-    with st.sidebar:
-        render_sidebar()
+    user = sidebar_block()  # sidebar_block сам сохраняет пользователя в session_state
+    if not user:
+        return
 
     # --- Правый фрейм / основной контент ---
-    if "user" in st.session_state and st.session_state.user:
-        user = st.session_state.user
-        right_col = st.container()
-        with right_col:
-            current_file_id = st.session_state.get("current_file_id")
-            if current_file_id:
-                file_data = get_file(st.session_state.conn, current_file_id, user["id"])
-                if file_data:
-                    file_name = file_data['filename']
-                    df = pd.read_csv(BytesIO(file_data['data']), header=None).dropna(how="any").reset_index(drop=True)
+    right_col = st.container()
+    with right_col:
+        current_file_id = st.session_state.get("current_file_id")
+        if current_file_id:
+            file_data = get_file(st.session_state.conn, current_file_id, user["id"])
+            if file_data:
+                file_name = file_data['filename']
+                df = pd.read_csv(BytesIO(file_data['data']), header=None).dropna(how="any").reset_index(drop=True)
 
-                    # Список слов + параметры генерации
-                    pause_sec, selected_indices = render_word_list(file_name, df)
+                # --- Список слов и выбранные индексы ---
+                pause_sec, selected_indices = render_word_list(file_name, df)
 
-                    # Генерация MP3 только для выбранных строк
-                    selected_df = df.loc[selected_indices] if selected_indices else pd.DataFrame()
-                    if not selected_df.empty:
-                        mp3_generator_block(user, selected_df, pause_sec)
-                    else:
-                        st.info("Не выбрано ни одной строки для генерации MP3.")
+                # --- Генерация MP3 по выбранным строкам ---
+                if selected_indices:
+                    selected_df = df.loc[selected_indices].reset_index(drop=True)
+                    mp3_generator_block(user, selected_df, pause_sec)
+                else:
+                    st.info("Сначала выберите строки для генерации")
 
 if __name__ == "__main__":
     main()
