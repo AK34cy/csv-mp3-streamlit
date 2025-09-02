@@ -26,10 +26,10 @@ if "conn" not in st.session_state:
         st.stop()
 
 def main():
-    # Авторизация
     user = login_block()
     if not user:
         return
+
     st.session_state.user = user
 
     # --- Левый и правый фреймы ---
@@ -46,27 +46,22 @@ def main():
         file_manager_block(user)
 
     with right_col:
+        # Если выбран файл, показываем его данные
         current_file_id = st.session_state.get("current_file_id")
-        if not current_file_id:
-            st.info("Сначала выберите файл слева")
-            return
+        if current_file_id:
+            file_data = get_file(st.session_state.conn, current_file_id, user["id"])
+            if file_data:
+                file_name = file_data['filename']
+                df_full = pd.read_csv(BytesIO(file_data['data']), header=None).dropna(how="any").reset_index(drop=True)
 
-        # Получаем данные файла
-        file_data = get_file(st.session_state.conn, current_file_id, user["id"])
-        if not file_data:
-            st.error("Файл не найден")
-            return
+                # --- Блок списка слов + выбор строк ---
+                selected_indices, pause_sec = render_word_list(file_name, df_full)
 
-        file_name = file_data['filename']
-        df = pd.read_csv(BytesIO(file_data['data']), header=None).dropna(how="any").reset_index(drop=True)
+                # --- Создаем df только с выбранными строками ---
+                df_selected = df_full.loc[selected_indices] if selected_indices else pd.DataFrame()
 
-        # --- Список слов и выбранные строки ---
-        pause_sec = render_word_list(file_name, df)
-        selected_indices = st.session_state.selected_rows.get(file_name, [])
-        df_selected = df.loc[selected_indices] if selected_indices else df
-
-        # --- Генерация MP3 ---
-        mp3_generator_block(user, df_selected, pause_sec)
+                # --- Генерация MP3 ---
+                mp3_generator_block(user, df_selected, pause_sec)
 
 if __name__ == "__main__":
     main()
