@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 # локальные модули
 from db import get_conn, init_db, get_file
-from sidebar_ui import render_sidebar
+from sidebar_ui import render_sidebar       # импортируем правильную функцию
 from mp3_generator import mp3_generator_block
 from word_list_ui import render_word_list
 
@@ -28,12 +28,12 @@ if "conn" not in st.session_state:
 def main():
     # --- Левый сайдбар ---
     with st.sidebar:
-        render_sidebar()
-    user = sidebar_block()  # sidebar_block сам сохраняет пользователя в session_state
-    if not user:
-        return
+        render_sidebar()  # вызываем функцию из sidebar_ui
+        if "user" not in st.session_state or st.session_state.user is None:
+            return  # если пользователь не авторизован — выходим
 
     # --- Правый фрейм / основной контент ---
+    user = st.session_state.user
     right_col = st.container()
     with right_col:
         current_file_id = st.session_state.get("current_file_id")
@@ -43,15 +43,11 @@ def main():
                 file_name = file_data['filename']
                 df = pd.read_csv(BytesIO(file_data['data']), header=None).dropna(how="any").reset_index(drop=True)
 
-                # --- Список слов и выбранные индексы ---
+                # Список слов + параметры генерации
                 pause_sec, selected_indices = render_word_list(file_name, df)
 
-                # --- Генерация MP3 по выбранным строкам ---
-                if selected_indices:
-                    selected_df = df.loc[selected_indices].reset_index(drop=True)
-                    mp3_generator_block(user, selected_df, pause_sec)
-                else:
-                    st.info("Сначала выберите строки для генерации")
+                # Генерация MP3
+                mp3_generator_block(user, df, pause_sec, selected_indices)
 
 if __name__ == "__main__":
     main()
