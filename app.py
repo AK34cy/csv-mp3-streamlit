@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 # локальные модули
 from db import get_conn, init_db, get_file
-from sidebar_ui import sidebar_block
+from sidebar_ui import render_sidebar
 from mp3_generator import mp3_generator_block
 from word_list_ui import render_word_list
 
@@ -27,6 +27,8 @@ if "conn" not in st.session_state:
 # --- главный блок ---
 def main():
     # --- Левый сайдбар ---
+    with st.sidebar:
+        render_sidebar()
     user = sidebar_block()  # sidebar_block сам сохраняет пользователя в session_state
     if not user:
         return
