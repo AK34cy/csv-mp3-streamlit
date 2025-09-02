@@ -25,47 +25,48 @@ if "conn" not in st.session_state:
         st.error(f"Ошибка подключения к БД: {e}")
         st.stop()
 
-# --- главный блок ---
 def main():
-    # --- Левый сайдбар ---
-    with st.sidebar:
-        if "user" not in st.session_state or st.session_state.user is None:
-            # Форма авторизации
-            user = login_block()  # возвращает dict пользователя или None
-            if user:
-                st.session_state.user = user
-                st.experimental_rerun()
-        else:
-            user = st.session_state.user
-            # Верхняя панель: имя, email, кнопка выхода
-            st.markdown(f"**Пользователь:** {user.get('name') or '—'} ({user['email']})")
-            if st.button("Выйти"):
-                st.session_state.user = None
-                st.session_state.current_file_id = None
-                st.experimental_rerun()
+    # Авторизация
+    user = login_block()
+    if not user:
+        return
+    st.session_state.user = user
 
-            # Работа с файлами
-            file_manager_block(user)
+    # --- Левый и правый фреймы ---
+    left_col, right_col = st.columns([1, 2])
 
-    # --- Правый фрейм / основной контент ---
-    if "user" in st.session_state and st.session_state.user:
-        user = st.session_state.user
-        right_col = st.container()
-        with right_col:
-            current_file_id = st.session_state.get("current_file_id")
-            if current_file_id:
-                file_data = get_file(st.session_state.conn, current_file_id, user["id"])
-                if file_data:
-                    file_name = file_data['filename']
-                    df = pd.read_csv(BytesIO(file_data['data']), header=None).dropna(how="any").reset_index(drop=True)
-        
-                    # --- Список слов + параметры генерации ---
-                    pause_sec = render_word_list(file_name, df)
-        
-                    # Получаем выбранные строки
-                    selected_indices = st.session_state.selected_rows.get(file_name, [])
-        
-                    # Генерация MP3
-                    mp3_generator_block(user, df, pause_sec, selected_indices)
+    with left_col:
+        # Верхняя панель: имя, email, кнопка выхода
+        st.markdown(f"**Пользователь:** {user.get('name') or '—'} ({user['email']})")
+        if st.button("Выйти"):
+            st.session_state.user = None
+            st.experimental_rerun()
+
+        # Работа с файлами
+        file_manager_block(user)
+
+    with right_col:
+        current_file_id = st.session_state.get("current_file_id")
+        if not current_file_id:
+            st.info("Сначала выберите файл слева")
+            return
+
+        # Получаем данные файла
+        file_data = get_file(st.session_state.conn, current_file_id, user["id"])
+        if not file_data:
+            st.error("Файл не найден")
+            return
+
+        file_name = file_data['filename']
+        df = pd.read_csv(BytesIO(file_data['data']), header=None).dropna(how="any").reset_index(drop=True)
+
+        # --- Список слов и выбранные строки ---
+        pause_sec = render_word_list(file_name, df)
+        selected_indices = st.session_state.selected_rows.get(file_name, [])
+        df_selected = df.loc[selected_indices] if selected_indices else df
+
+        # --- Генерация MP3 ---
+        mp3_generator_block(user, df_selected, pause_sec)
+
 if __name__ == "__main__":
     main()
