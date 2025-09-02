@@ -26,12 +26,15 @@ if "conn" not in st.session_state:
         st.stop()
 
 def main():
-    user = login_block()
-    if not user:
-        return
+    # Проверяем, есть ли пользователь в сессии
+    user = st.session_state.get("user")
 
-    # Сохраняем пользователя в session_state
-    st.session_state.user = user
+    if not user:
+        # Форма авторизации появляется только если нет пользователя
+        user = login_block()
+        if not user:
+            return
+        st.session_state.user = user  # сохраняем в сессию
 
     # --- Левый и правый фреймы ---
     left_col, right_col = st.columns([1, 2])
@@ -41,6 +44,7 @@ def main():
         st.markdown(f"**Пользователь:** {user.get('name') or '—'} ({user['email']})")
         if st.button("Выйти"):
             st.session_state.user = None
+            st.session_state.current_file_id = None
             st.experimental_rerun()
 
         # Работа с файлами
