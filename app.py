@@ -58,12 +58,14 @@ def main():
                 if file_data:
                     file_name = file_data['filename']
                     df = pd.read_csv(BytesIO(file_data['data']), header=None).dropna(how="any").reset_index(drop=True)
-
-                    # Список слов + параметры генерации
+        
+                    # --- Список слов + параметры генерации ---
                     pause_sec = render_word_list(file_name, df)
-
+        
+                    # Получаем выбранные строки
+                    selected_indices = st.session_state.selected_rows.get(file_name, [])
+        
                     # Генерация MP3
-                    mp3_generator_block(user, df, pause_sec)
-
+                    mp3_generator_block(user, df, pause_sec, selected_indices)
 if __name__ == "__main__":
     main()
