@@ -2,74 +2,79 @@
 import streamlit as st
 import pandas as pd
 from io import BytesIO
-from db import get_file
 from gtts import gTTS
 from pydub import AudioSegment
 
-def build_merged_mp3(df, selected_indices=None, pause_sec=0.5):
-    """
-    Генерация MP3 из DataFrame.
-    selected_indices: список индексов строк для генерации
-    pause_sec: пауза между строками в секундах
-    """
-    if selected_indices is None:
-        selected_indices = df.index.tolist()
+def _tts_to_segment(text: str, lang: str) -> AudioSegment:
+    buf = BytesIO()
+    tts = gTTS(text=text, lang=lang)
+    tts.write_to_fp(buf)
+    buf.seek(0)
+    seg = AudioSegment.from_file(buf, format="mp3")
+    return seg
 
-    mp3_combined = AudioSegment.silent(duration=0)
-    for i in selected_indices:
-        row = df.iloc[i]
-        text_ru = []
-        text_de = []
+def build_merged_mp3(rows, pause_ms: int = 500, ru_col: int = 0, ru_lang: str = "ru", de_lang: str = "de", progress_callback=None):
+    track = AudioSegment.silent(duration=0)
+    total = len(rows)
+    first_ru_done = False
 
-        # Разделяем по языкам (русский / немецкий) по индексу столбца
-        for idx, cell in enumerate(row):
-            if pd.isna(cell):
+    for idx, row in enumerate(rows):
+        cells = [str(c).strip() for c in row if c and str(c).strip().lower() not in ("nan", "none")]
+        if not cells:
+            if progress_callback:
+                try: progress_callback(idx)
+                except TypeError:
+                    try: progress_callback(idx, total)
+                    except Exception: pass
+            continue
+
+        # Русское слово с паузой
+        if 0 <= ru_col < len(cells):
+            if first_ru_done:
+                track += AudioSegment.silent(duration=pause_ms)
+            try:
+                track += _tts_to_segment(cells[ru_col], ru_lang)
+            except Exception as e:
+                print(f"[WARN] gTTS RU failed for '{cells[ru_col]}': {e}")
+            first_ru_done = True
+
+        # Немецкие слова
+        for j, text in enumerate(cells):
+            if j == ru_col:
                 continue
-            # Если столбец четный — русское слово, нечетный — немецкое
-            if idx % 2 == 0:
-                text_ru.append(str(cell))
-            else:
-                text_de.append(str(cell))
+            try:
+                track += _tts_to_segment(text, de_lang)
+            except Exception as e:
+                print(f"[WARN] gTTS DE failed for '{text}': {e}")
 
-        # Генерация русского MP3
-        if text_ru:
-            tts_ru = gTTS(text=" ".join(text_ru), lang="ru")
-            buf_ru = BytesIO()
-            tts_ru.write_to_fp(buf_ru)
-            buf_ru.seek(0)
-            seg_ru = AudioSegment.from_file(buf_ru, format="mp3")
-            mp3_combined += seg_ru + AudioSegment.silent(duration=int(pause_sec*1000))
-
-        # Генерация немецкого MP3
-        if text_de:
-            tts_de = gTTS(text=" ".join(text_de), lang="de")
-            buf_de = BytesIO()
-            tts_de.write_to_fp(buf_de)
-            buf_de.seek(0)
-            seg_de = AudioSegment.from_file(buf_de, format="mp3")
-            mp3_combined += seg_de + AudioSegment.silent(duration=int(pause_sec*1000))
+        if progress_callback:
+            try: progress_callback(idx)
+            except TypeError:
+                try: progress_callback(idx, total)
+                except Exception: pass
 
     out_buf = BytesIO()
-    mp3_combined.export(out_buf, format="mp3")
+    track.export(out_buf, format="mp3", bitrate="128k")
     out_buf.seek(0)
     return out_buf
 
-def mp3_generator_block(user, df, pause_sec, selected_indices):
-    """
-    Streamlit-блок генерации MP3.
-    df: DataFrame выбранного файла
-    pause_sec: пауза между строками
-    selected_indices: список индексов выбранных строк
-    """
-    st.subheader("🎧 Генератор MP3")
-    file_name = st.session_state.get("current_file_name", "output")
 
+def mp3_generator_block(user, df, pause_sec, selected_indices):
+    if not selected_indices:
+        st.info("Сначала выберите строки для генерации")
+        return
+
+    df_selected = df.loc[selected_indices].values.tolist()
+    total = len(df_selected)
+
+    st.subheader("🎧 Генератор MP3")
     if st.button("▶️ Сгенерировать MP3"):
-        with st.spinner("Генерация..."):
-            mp3_buf = build_merged_mp3(df, selected_indices, pause_sec=pause_sec)
-            st.audio(mp3_buf, format="audio/mp3")
-            st.download_button(
-                "💾 Скачать MP3",
-                data=mp3_buf,
-                file_name=f"{file_name}.mp3"
-            )
+        progress_bar = st.progress(0)
+        def progress_callback(idx):
+            progress_bar.progress((idx + 1) / total)
+
+        # конвертируем паузу в миллисекунды
+        pause_ms = int(pause_sec * 1000)
+        mp3_buf = build_merged_mp3(df_selected, pause_ms=pause_ms, progress_callback=progress_callback)
+        st.audio(mp3_buf, format="audio/mp3")
+        st.download_button("💾 Скачать MP3", data=mp3_buf, file_name="output.mp3")
