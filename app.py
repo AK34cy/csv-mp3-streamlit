@@ -30,9 +30,14 @@ def main():
     left_col, right_col = st.columns([1, 2])
 
     with left_col:
-        user = st.session_state.get("user")
-        
-        if user:
+        if "user" not in st.session_state or st.session_state.user is None:
+            # Форма авторизации
+            user = login_block()
+            if user:
+                st.session_state.user = user
+                st.experimental_rerun()
+        else:
+            user = st.session_state.user
             # Пользователь авторизован
             st.markdown(f"**Пользователь:** {user.get('name') or '—'} ({user['email']})")
             if st.button("Выйти"):
@@ -41,12 +46,6 @@ def main():
                 st.experimental_rerun()
             # Работа с файлами
             file_manager_block(user)
-        else:
-            # Форма авторизации
-            new_user = login_block()
-            if new_user:
-                st.session_state.user = new_user
-                st.experimental_rerun()
 
     with right_col:
         # Если выбран файл, показываем его данные и слова
