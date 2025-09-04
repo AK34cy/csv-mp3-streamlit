@@ -4,6 +4,7 @@ from gtts import gTTS
 from pydub import AudioSegment
 from io import BytesIO
 from tempfile import NamedTemporaryFile
+import os
 
 def _tts_to_segment(text: str, lang: str) -> AudioSegment:
     """Преобразование текста в сегмент AudioSegment через gTTS"""
@@ -13,11 +14,9 @@ def _tts_to_segment(text: str, lang: str) -> AudioSegment:
     buf.seek(0)
     return AudioSegment.from_file(buf, format="mp3")
 
-
-def build_merged_mp3(rows, pause_ms: int = 500, ru_col: int = 0,
-                     ru_lang: str = "ru", de_lang: str = "de", progress_callback=None):
+def build_merged_mp3(rows, pause_ms: int = 500, ru_col: int = 0, ru_lang: str = "ru", de_lang: str = "de", progress_callback=None):
     """
-    Генерация MP3 из выбранных строк.
+    Генерация MP3 из списка выбранных строк.
     rows — список списков (строки файла)
     pause_ms — пауза перед русским словом (кроме первого)
     """
@@ -26,6 +25,7 @@ def build_merged_mp3(rows, pause_ms: int = 500, ru_col: int = 0,
     first_ru_done = False
 
     for idx, row in enumerate(rows):
+        # Приведение к строкам и фильтр пустых
         cells = [str(c).strip() for c in row if c and str(c).strip().lower() not in ("nan", "none")]
         if not cells:
             if progress_callback:
@@ -60,39 +60,37 @@ def build_merged_mp3(rows, pause_ms: int = 500, ru_col: int = 0,
                 try: progress_callback(idx, total)
                 except Exception: pass
 
-    out_buf = BytesIO()
-    track.export(out_buf, format="mp3", bitrate="128k")
-    out_buf.seek(0)
-    return out_buf
+    # Записываем в временный файл на диске
+    tmp_file = NamedTemporaryFile(delete=False, suffix=".mp3")
+    track.export(tmp_file.name, format="mp3", bitrate="128k")
+    tmp_file.close()
+    return tmp_file.name
 
-
-def mp3_generator_block(user, df, pause_sec=500, selected_indices=None):
+def mp3_generator_block(user, rows, pause_ms=500):
     """
     Streamlit-блок генерации MP3.
-    df — полный DataFrame выбранного файла.
-    selected_indices — список индексов выбранных строк для генерации.
-    pause_sec — пауза перед русским словом (в мс).
+    rows — список выбранных строк из таблицы.
     """
     st.subheader("🎧 Генератор MP3")
 
-    if selected_indices is None or not selected_indices:
+    if not rows:
         st.info("Сначала выберите строки слева")
         return
 
-    # Берём только выбранные строки
-    rows = df.iloc[selected_indices].values.tolist()
+    progress_bar = st.progress(0)
+
+    def progress_callback(idx, total=None):
+        if total:
+            progress_bar.progress((idx + 1) / total)
+        else:
+            progress_bar.progress(idx + 1)
 
     if st.button("▶️ Сгенерировать MP3"):
         with st.spinner("Генерация MP3..."):
-            mp3_buf = build_merged_mp3(rows, pause_ms=int(pause_sec*1000))
-
-            # Сохраняем во временный файл для корректного воспроизведения
-            with NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
-                tmp.write(mp3_buf.read())
-                tmp_path = tmp.name
-
+            tmp_path = build_merged_mp3(rows, pause_ms=pause_ms, progress_callback=progress_callback)
             st.audio(tmp_path, format="audio/mp3")
-
-            # Кнопка скачивания
             with open(tmp_path, "rb") as f:
                 st.download_button("💾 Скачать MP3", data=f, file_name="output.mp3")
+
+            # Можно удалить временный файл после использования
+            os.remove(tmp_path)
