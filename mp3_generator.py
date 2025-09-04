@@ -1,10 +1,9 @@
-# mp3_generator.py
 import streamlit as st
-import pandas as pd
 from gtts import gTTS
 from pydub import AudioSegment
 from io import BytesIO
 from tempfile import NamedTemporaryFile
+import pandas as pd
 
 def _tts_to_segment(text: str, lang: str) -> AudioSegment:
     """Преобразование текста в сегмент AudioSegment через gTTS"""
@@ -15,25 +14,29 @@ def _tts_to_segment(text: str, lang: str) -> AudioSegment:
     return AudioSegment.from_file(buf, format="mp3")
 
 
-def build_merged_mp3(rows, selected_indices, pause_ms: int = 500, ru_col: int = 0,
-                     ru_lang: str = "ru", de_lang: str = "de", progress_callback=None):
+def build_merged_mp3(
+    rows,
+    pause_ms: int = 500,
+    ru_col: int = 0,
+    ru_lang: str = "ru",
+    de_lang: str = "de",
+    progress_callback=None
+):
     """
     Генерация MP3 из выбранных строк.
-    rows — pd.DataFrame
-    selected_indices — список индексов выбранных строк
+    rows — список списков (строки файла)
     pause_ms — пауза перед русским словом (кроме первого)
     """
     track = AudioSegment.silent(duration=0)
+    total = len(rows)
     first_ru_done = False
-    total = len(selected_indices)
 
-    for count, idx in enumerate(selected_indices):
-        row = rows.iloc[idx]
+    for idx, row in enumerate(rows):
         # Приведение к строкам и фильтр пустых
-        cells = [str(c).strip() for c in row if pd.notna(c) and str(c).strip().lower() not in ("nan", "none")]
+        cells = [str(c).strip() for c in row if c and str(c).strip().lower() not in ("nan", "none")]
         if not cells:
             if progress_callback:
-                progress_callback(count)
+                progress_callback(idx)
             continue
 
         # Русское слово
@@ -56,53 +59,46 @@ def build_merged_mp3(rows, selected_indices, pause_ms: int = 500, ru_col: int = 
                 print(f"[WARN] gTTS DE failed for '{text}': {e}")
 
         if progress_callback:
-            progress_callback(count + 1)
+            progress_callback(idx + 1)
 
-    # Сохраняем в BytesIO для скачивания
+    # Сохраняем в BytesIO для передачи в Streamlit
     out_buf = BytesIO()
     track.export(out_buf, format="mp3", bitrate="128k")
     out_buf.seek(0)
     return out_buf
 
 
-def mp3_generator_block(user, df, pause_sec, selected_indices):
+def mp3_generator_block(user, rows, pause_ms=500):
     """
     Streamlit-блок генерации MP3.
-    df — pd.DataFrame выбранного файла
-    selected_indices — список выбранных строк
-    pause_sec — пауза перед русским словом
+    rows — список выбранных строк из таблицы.
     """
     st.subheader("🎧 Генератор MP3")
 
-    if not selected_indices:
-        st.info("Сначала выберите строки для генерации")
+    if not rows:
+        st.info("Сначала выберите строки слева")
         return
 
     progress_bar = st.progress(0)
-    progress_text = st.empty()
+    status_text = st.empty()
+
+    def progress_callback(idx):
+        progress = int((idx / len(rows)) * 100)
+        progress_bar.progress(progress)
+        status_text.text(f"Обработано {idx}/{len(rows)} строк")
 
     if st.button("▶️ Сгенерировать MP3"):
-        # Прогресс коллбек
-        def progress_callback(count):
-            progress = int(count / len(selected_indices) * 100)
-            progress_bar.progress(progress)
-            progress_text.text(f"{progress}% завершено")
-
         with st.spinner("Генерация MP3..."):
-            mp3_buf = build_merged_mp3(df, selected_indices, pause_ms=int(pause_sec * 1000),
-                                        ru_col=0, ru_lang="ru", de_lang="de",
-                                        progress_callback=progress_callback)
+            mp3_buf = build_merged_mp3(rows, pause_ms=int(pause_ms * 1000), progress_callback=progress_callback)
+            progress_bar.progress(100)
+            status_text.text(f"Готово! Всего {len(rows)} строк")
 
-            # Временный файл для корректного st.audio
+            # Сохраняем во временный файл для корректного воспроизведения
             with NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
                 tmp.write(mp3_buf.read())
                 tmp_path = tmp.name
 
             st.audio(tmp_path, format="audio/mp3")
 
-            # Кнопка скачивания
             with open(tmp_path, "rb") as f:
                 st.download_button("💾 Скачать MP3", data=f, file_name="output.mp3")
-
-            progress_bar.empty()
-            progress_text.empty()
