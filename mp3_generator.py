@@ -1,5 +1,6 @@
 # mp3_generator.py
 import streamlit as st
+import pandas as pd
 from gtts import gTTS
 from pydub import AudioSegment
 from io import BytesIO
