@@ -3,33 +3,35 @@ from gtts import gTTS
 from pydub import AudioSegment
 from io import BytesIO
 from tempfile import NamedTemporaryFile
-import pandas as pd
 
 def _tts_to_segment(text: str, lang: str) -> AudioSegment:
-    """Преобразует текст в аудиосегмент через gTTS"""
+    """Преобразование текста в сегмент AudioSegment через gTTS"""
     buf = BytesIO()
     tts = gTTS(text=text, lang=lang)
     tts.write_to_fp(buf)
     buf.seek(0)
     return AudioSegment.from_file(buf, format="mp3")
 
-
-def build_merged_mp3(rows, selected_indices, pause_ms: int = 500, ru_col: int = 0, ru_lang="ru", de_lang="de", progress_callback=None):
+def build_merged_mp3(rows, pause_ms: int = 500, ru_col: int = 0, ru_lang: str = "ru",
+                     de_lang: str = "de", progress_callback=None):
     """
-    Генерация MP3 для выбранных строк.
-    rows — DataFrame
-    selected_indices — список индексов выбранных строк
+    Генерация MP3 из списка выбранных строк.
+    rows — список списков (каждая строка CSV)
+    pause_ms — пауза перед русским словом (кроме первого)
     """
     track = AudioSegment.silent(duration=0)
+    total = len(rows)
     first_ru_done = False
-    total = len(selected_indices)
 
-    for idx, row_idx in enumerate(selected_indices):
-        row = rows.iloc[row_idx]
-        cells = [str(c).strip() for c in row if pd.notna(c) and str(c).strip().lower() not in ("nan", "none")]
+    for idx, row in enumerate(rows):
+        # Приведение к строкам и фильтр пустых
+        cells = [str(c).strip() for c in row if c and str(c).strip().lower() not in ("nan", "none")]
         if not cells:
             if progress_callback:
-                progress_callback(idx, total)
+                try: progress_callback(idx)
+                except TypeError:
+                    try: progress_callback(idx, total)
+                    except Exception: pass
             continue
 
         # Русское слово
@@ -52,37 +54,38 @@ def build_merged_mp3(rows, selected_indices, pause_ms: int = 500, ru_col: int = 
                 print(f"[WARN] gTTS DE failed for '{text}': {e}")
 
         if progress_callback:
-            progress_callback(idx + 1, total)
+            try: progress_callback(idx)
+            except TypeError:
+                try: progress_callback(idx, total)
+                except Exception: pass
 
-    # Сохраняем MP3 на диск
-    tmp_file = NamedTemporaryFile(delete=False, suffix=".mp3")
-    track.export(tmp_file.name, format="mp3", bitrate="128k")
-    tmp_file.close()
-    return tmp_file.name
+    # Сохраняем в BytesIO для Streamlit
+    out_buf = BytesIO()
+    track.export(out_buf, format="mp3", bitrate="128k")
+    out_buf.seek(0)
+    return out_buf
 
-
-def mp3_generator_block(user, df, pause_sec, selected_indices):
+def mp3_generator_block(user, rows, pause_ms=500, selected_indices=None):
     """
     Streamlit-блок генерации MP3.
+    rows — список выбранных строк из таблицы (список списков)
+    selected_indices — индексы выбранных строк (не обязательный)
     """
     st.subheader("🎧 Генератор MP3")
 
-    if not selected_indices:
+    if not rows:
         st.info("Сначала выберите строки слева")
         return
 
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-
     if st.button("▶️ Сгенерировать MP3"):
         with st.spinner("Генерация MP3..."):
-            def progress_callback(current, total):
-                progress_bar.progress(current / total)
-                status_text.text(f"Генерация: {current}/{total} строк")
+            mp3_buf = build_merged_mp3(rows, pause_ms=pause_ms)
 
-            tmp_path = build_merged_mp3(df, selected_indices, pause_ms=int(pause_sec * 1000), progress_callback=progress_callback)
+            # Сохраняем во временный файл для корректного воспроизведения st.audio
+            with NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
+                tmp.write(mp3_buf.read())
+                tmp_path = tmp.name
 
-            st.success("Генерация завершена!")
             st.audio(tmp_path, format="audio/mp3")
 
             with open(tmp_path, "rb") as f:
