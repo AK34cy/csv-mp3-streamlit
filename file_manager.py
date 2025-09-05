@@ -1,8 +1,19 @@
 # file_manager.py
 import streamlit as st
 import pandas as pd
+import re
 from db import store_file, list_user_files, get_file
 from config import LANGUAGES  # словарь языков, например {"Немецкий": "de", "Английский": "en", "Греческий": "el"}
+
+def is_valid_row(row):
+    """Проверка, что строка содержит русское слово и хотя бы одно слово перевода"""
+    ru_cell = str(row[0]).strip()
+    if not re.search(r'\w', ru_cell):  # первая колонка должна содержать буквы
+        return False
+    translation_cells = row[1:]
+    if not any(re.search(r'\w', str(c).strip()) for c in translation_cells):
+        return False
+    return True
 
 def file_manager_block(user):
     st.subheader("📂 Ваши файлы")
@@ -13,20 +24,11 @@ def file_manager_block(user):
     if uploaded:
         if "uploaded_file_processed" not in st.session_state or st.session_state.uploaded_file_processed != uploaded.name:
             try:
-                # Чтение CSV с безопасной обработкой
-                df = pd.read_csv(
-                    uploaded,
-                    header=None,
-                    sep=",",
-                    engine="python",
-                    on_bad_lines='skip'
-                )
-
-                # Приведение к строкам и удаление пробелов
-                df = df.applymap(lambda x: str(x).strip() if pd.notna(x) else "")
-
-                # Оставляем строки, где минимум 2 непустых элемента
-                df = df[df.apply(lambda row: sum(1 for cell in row if cell) >= 2, axis=1)].reset_index(drop=True)
+                # Чтение CSV
+                df = pd.read_csv(uploaded, header=None, dtype=str, keep_default_na=False)
+                
+                # --- Фильтруем только строки с минимум 2 значимыми элементами ---
+                df = df[df.apply(is_valid_row, axis=1)].reset_index(drop=True)
 
                 if df.empty:
                     st.warning("После фильтрации не осталось строк с минимум 2 значимыми элементами.")
@@ -52,7 +54,6 @@ def file_manager_block(user):
                     st.success(f"Файл '{uploaded.name}' сохранён в БД (язык: {selected_lang_name})")
                     st.session_state.uploaded_file_processed = uploaded.name
                     st.experimental_rerun()
-
             except Exception as e:
                 st.error(f"Ошибка при обработке файла: {e}")
 
