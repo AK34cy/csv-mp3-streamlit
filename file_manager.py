@@ -2,6 +2,7 @@
 import streamlit as st
 import pandas as pd
 from db import store_file, list_user_files, get_file
+from config import LANGUAGES  # словарь языков, например {"Немецкий": "de", "Английский": "en", "Греческий": "el"}
 
 def file_manager_block(user):
     st.subheader("📂 Ваши файлы")
@@ -21,9 +22,26 @@ def file_manager_block(user):
                     .dropna(how="any")
                     .reset_index(drop=True)
                 )
-                # Сохранение в БД
-                store_file(st.session_state.conn, user["id"], uploaded.name, uploaded.getvalue(), kind="csv")
-                st.success(f"Файл '{uploaded.name}' сохранён в БД")
+
+                # --- Выбор языка перевода ---
+                selected_lang_name = st.selectbox(
+                    "Язык перевода",
+                    options=list(LANGUAGES.keys()),
+                    index=0
+                )
+                selected_lang = LANGUAGES[selected_lang_name]
+
+                # Сохранение в БД с указанием языка
+                store_file(
+                    st.session_state.conn,
+                    user["id"],
+                    uploaded.name,
+                    uploaded.getvalue(),
+                    kind="csv",
+                    lang=selected_lang
+                )
+
+                st.success(f"Файл '{uploaded.name}' сохранён в БД (язык: {selected_lang_name})")
                 # Отмечаем, что этот файл уже обработан
                 st.session_state.uploaded_file_processed = uploaded.name
                 st.experimental_rerun()
