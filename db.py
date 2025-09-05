@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS user_files (
     filename TEXT NOT NULL,
     kind TEXT NOT NULL DEFAULT 'csv',
     data BYTEA NOT NULL,
-    lang TEXT NOT NULL DEFAULT 'de',
+    target_lang TEXT NOT NULL DEFAULT 'de',
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_user_files_user_id ON user_files(user_id);
@@ -57,12 +57,12 @@ def create_user(conn, email: str, name: str, password_hash: str):
         )
         return cur.fetchone()
 
-def store_file(conn, user_id: int, filename: str, data: bytes, kind: str = "csv", lang: str = "de"):
+def store_file(conn, user_id: int, filename: str, data: bytes, kind: str = "csv", target_lang: str = "de"):
     """Сохраняет файл в БД с указанием языка"""
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         cur.execute(
-            "INSERT INTO user_files (user_id, filename, kind, data, lang) VALUES (%s, %s, %s, %s, %s) RETURNING id",
-            (user_id, filename, kind, psycopg2.Binary(data), lang),
+            "INSERT INTO user_files (user_id, filename, kind, data, target_lang) VALUES (%s, %s, %s, %s, %s) RETURNING id",
+            (user_id, filename, kind, psycopg2.Binary(data), target_lang),
         )
         return cur.fetchone()["id"]
 
@@ -70,12 +70,12 @@ def list_user_files(conn, user_id: int, kind: str | None = None):
     with conn.cursor(cursor_factory=RealDictCursor) as cur:
         if kind:
             cur.execute(
-                "SELECT id, filename, kind, lang, created_at FROM user_files WHERE user_id=%s AND kind=%s ORDER BY created_at DESC",
+                "SELECT id, filename, kind, target_lang, created_at FROM user_files WHERE user_id=%s AND kind=%s ORDER BY created_at DESC",
                 (user_id, kind),
             )
         else:
             cur.execute(
-                "SELECT id, filename, kind, lang, created_at FROM user_files WHERE user_id=%s ORDER BY created_at DESC",
+                "SELECT id, filename, kind, target_lang, created_at FROM user_files WHERE user_id=%s ORDER BY created_at DESC",
                 (user_id,),
             )
         return cur.fetchall()
@@ -83,11 +83,11 @@ def list_user_files(conn, user_id: int, kind: str | None = None):
 def get_file(conn, file_id: int, user_id: int):
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT filename, kind, data, lang FROM user_files WHERE id=%s AND user_id=%s",
+            "SELECT filename, kind, data, target_lang FROM user_files WHERE id=%s AND user_id=%s",
             (file_id, user_id),
         )
         row = cur.fetchone()
         if not row:
             return None
-        filename, kind, data, lang = row
-        return {"filename": filename, "kind": kind, "data": bytes(data), "lang": lang}
+        filename, kind, data, target_lang = row
+        return {"filename": filename, "kind": kind, "data": bytes(data), "target_lang": target_lang}
