@@ -16,33 +16,46 @@ def login_block():
 
     tab_login, tab_reg = st.sidebar.tabs(["Войти", "Регистрация"])
 
+    # --- Вход ---
     user = None
     with tab_login:
-        email = st.text_input("Email", key="login_email")
-        password = st.text_input("Пароль", type="password", key="login_pwd")
-        if st.button("Войти"):
-            if email and password:
-                u = get_user_by_email(conn, email.strip().lower())
-                if u and bcrypt.checkpw(password.encode("utf-8"), u["password_hash"].encode("utf-8")):
-                    st.session_state.user = u
-                    st.success(f"Добро пожаловать, {u.get('name') or u['email']}!")
+        with st.form("login_form", clear_on_submit=False):
+            email = st.text_input("Email", key="login_email")
+            password = st.text_input("Пароль", type="password", key="login_pwd")
+            submit_login = st.form_submit_button("Войти")
+
+            # Автопереход на пароль после email
+            if "login_email" in st.session_state and not st.session_state.get("login_pwd_focused", False):
+                st.session_state.login_pwd_focused = True
+                st.experimental_set_query_params(focus="login_pwd")
+
+            if submit_login:
+                if email and password:
+                    u = get_user_by_email(conn, email.strip().lower())
+                    if u and bcrypt.checkpw(password.encode("utf-8"), u["password_hash"].encode("utf-8")):
+                        st.session_state.user = u
+                        st.success(f"Добро пожаловать, {u.get('name') or u['email']}!")
+                        st.experimental_rerun()
+                    else:
+                        st.error("Неверный email или пароль")
+
+    # --- Регистрация ---
+    with tab_reg:
+        with st.form("reg_form", clear_on_submit=False):
+            email = st.text_input("Email", key="reg_email")
+            name = st.text_input("Имя", key="reg_name")
+            password = st.text_input("Пароль", type="password", key="reg_pwd")
+            password_repeat = st.text_input("Повтор пароля", type="password", key="reg_pwd2")
+            submit_reg = st.form_submit_button("Зарегистрироваться")
+
+            if submit_reg:
+                ok, msg, user = register_user(conn, email, name, password, password_repeat)
+                if ok:
+                    st.session_state.user = user
+                    st.success(msg)
                     st.experimental_rerun()
                 else:
-                    st.error("Неверный email или пароль")
-    
-    with tab_reg:
-        email = st.text_input("Email", key="reg_email")
-        name = st.text_input("Имя", key="reg_name")
-        password = st.text_input("Пароль", type="password", key="reg_pwd")
-        password_repeat = st.text_input("Повтор пароля", type="password", key="reg_pwd2")
-        if st.button("Зарегистрироваться"):
-            ok, msg, user = register_user(conn, email, name, password, password_repeat)
-            if ok:
-                st.session_state.user = user
-                st.success(msg)
-                st.experimental_rerun()
-            else:
-                st.error(msg)
+                    st.error(msg)
 
     return st.session_state.user
 
