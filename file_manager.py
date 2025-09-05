@@ -1,4 +1,3 @@
-# file_manager.py
 import streamlit as st
 import pandas as pd
 from db import store_file, list_user_files, get_file
