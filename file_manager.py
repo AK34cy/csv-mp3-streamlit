@@ -1,3 +1,4 @@
+# file_manager.py
 import streamlit as st
 import pandas as pd
 from db import store_file, list_user_files, get_file
@@ -12,36 +13,46 @@ def file_manager_block(user):
     if uploaded:
         if "uploaded_file_processed" not in st.session_state or st.session_state.uploaded_file_processed != uploaded.name:
             try:
-                # Чтение CSV и очистка пустых строк/ячейок
-                df = (
-                    pd.read_csv(uploaded, header=None)
-                    .dropna(how="any")
-                    .replace(r'^\s*$', pd.NA, regex=True)
-                    .dropna(how="any")
-                    .reset_index(drop=True)
+                # Чтение CSV с безопасной обработкой
+                df = pd.read_csv(
+                    uploaded,
+                    header=None,
+                    sep=",",
+                    engine="python",
+                    on_bad_lines='skip'
                 )
 
-                # --- Выбор языка перевода ---
-                selected_lang_name = st.selectbox(
-                    "Язык перевода",
-                    options=list(LANGUAGES.keys()),
-                    index=0
-                )
-                selected_lang = LANGUAGES[selected_lang_name]
+                # Приведение к строкам и удаление пробелов
+                df = df.applymap(lambda x: str(x).strip() if pd.notna(x) else "")
 
-                # Сохранение в БД с указанием языка
-                store_file(
-                    st.session_state.conn,
-                    user["id"],
-                    uploaded.name,
-                    uploaded.getvalue(),
-                    kind="csv",
-                    target_lang=selected_lang
-                )
+                # Оставляем строки, где минимум 2 непустых элемента
+                df = df[df.apply(lambda row: sum(1 for cell in row if cell) >= 2, axis=1)].reset_index(drop=True)
 
-                st.success(f"Файл '{uploaded.name}' сохранён в БД (язык: {selected_lang_name})")
-                st.session_state.uploaded_file_processed = uploaded.name
-                st.experimental_rerun()
+                if df.empty:
+                    st.warning("После фильтрации не осталось строк с минимум 2 значимыми элементами.")
+                else:
+                    # --- Выбор языка перевода ---
+                    selected_lang_name = st.selectbox(
+                        "Язык перевода",
+                        options=list(LANGUAGES.keys()),
+                        index=0
+                    )
+                    selected_lang = LANGUAGES[selected_lang_name]
+
+                    # Сохранение в БД с указанием языка
+                    store_file(
+                        st.session_state.conn,
+                        user["id"],
+                        uploaded.name,
+                        uploaded.getvalue(),
+                        kind="csv",
+                        target_lang=selected_lang
+                    )
+
+                    st.success(f"Файл '{uploaded.name}' сохранён в БД (язык: {selected_lang_name})")
+                    st.session_state.uploaded_file_processed = uploaded.name
+                    st.experimental_rerun()
+
             except Exception as e:
                 st.error(f"Ошибка при обработке файла: {e}")
 
