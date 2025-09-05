@@ -9,6 +9,7 @@ from db import get_conn, init_db, get_file
 from sidebar_ui import render_sidebar       # левый сайдбар
 from mp3_generator import mp3_generator_block
 from word_list_ui import render_word_list
+from config import LANGUAGES                 # словарь доступных языков
 
 # --- инициализация конфигов ---
 load_dotenv()
@@ -43,12 +44,12 @@ def main():
                 file_name = file_data['filename']
                 df = pd.read_csv(BytesIO(file_data['data']), header=None).dropna(how="any").reset_index(drop=True)
 
-                # Список слов + параметры генерации
-                pause_sec, selected_indices = render_word_list(file_name, df)
+                # Список слов + параметры генерации (возвращает pause_sec, выбранные индексы и язык)
+                pause_sec, selected_indices, lang = render_word_list(file_name, df, LANGUAGES)
 
                 # Генерация MP3 по выбранным строкам
                 selected_rows = df.iloc[selected_indices].values.tolist() if selected_indices else []
-                mp3_generator_block(user, selected_rows, pause_sec, selected_indices)
+                mp3_generator_block(user, selected_rows, pause_sec, lang)
 
 if __name__ == "__main__":
     main()
