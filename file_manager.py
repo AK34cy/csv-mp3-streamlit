@@ -11,7 +11,6 @@ def file_manager_block(user):
 
     # --- Обработка загруженного файла только один раз ---
     if uploaded:
-        # Проверяем, обрабатывался ли уже этот файл
         if "uploaded_file_processed" not in st.session_state or st.session_state.uploaded_file_processed != uploaded.name:
             try:
                 # Чтение CSV и очистка пустых строк/ячейок
@@ -38,11 +37,10 @@ def file_manager_block(user):
                     uploaded.name,
                     uploaded.getvalue(),
                     kind="csv",
-                    lang=selected_lang
+                    target_lang=selected_lang
                 )
 
                 st.success(f"Файл '{uploaded.name}' сохранён в БД (язык: {selected_lang_name})")
-                # Отмечаем, что этот файл уже обработан
                 st.session_state.uploaded_file_processed = uploaded.name
                 st.experimental_rerun()
             except Exception as e:
