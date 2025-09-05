@@ -12,12 +12,16 @@ def _tts_to_segment(text: str, lang: str) -> AudioSegment:
     buf.seek(0)
     return AudioSegment.from_file(buf, format="mp3")
 
+
 def build_merged_mp3(rows, pause_ms: int = 500, ru_col: int = 0, ru_lang: str = "ru",
-                     de_lang: str = "de", progress_callback=None):
+                     file_lang: str = "de", progress_callback=None):
     """
     Генерация MP3 из списка выбранных строк.
     rows — список списков (каждая строка CSV)
     pause_ms — пауза перед русским словом (кроме первого)
+    ru_col — индекс русского слова (по умолчанию 0)
+    ru_lang — язык русского слова (по умолчанию "ru")
+    file_lang — язык перевода (немецкий, английский, греческий и др.)
     """
     track = AudioSegment.silent(duration=0)
     total = len(rows)
@@ -44,14 +48,14 @@ def build_merged_mp3(rows, pause_ms: int = 500, ru_col: int = 0, ru_lang: str = 
                 print(f"[WARN] gTTS RU failed for '{cells[ru_col]}': {e}")
             first_ru_done = True
 
-        # Остальные слова (немецкие)
+        # Остальные слова (перевод)
         for j, text in enumerate(cells):
             if j == ru_col:
                 continue
             try:
-                track += _tts_to_segment(text, de_lang)
+                track += _tts_to_segment(text, file_lang)
             except Exception as e:
-                print(f"[WARN] gTTS DE failed for '{text}': {e}")
+                print(f"[WARN] gTTS failed for '{text}' ({file_lang}): {e}")
 
         if progress_callback:
             try: progress_callback(idx)
@@ -65,11 +69,13 @@ def build_merged_mp3(rows, pause_ms: int = 500, ru_col: int = 0, ru_lang: str = 
     out_buf.seek(0)
     return out_buf
 
-def mp3_generator_block(user, rows, pause_ms=500, selected_indices=None):
+
+def mp3_generator_block(user, rows, pause_ms=500, file_lang="de"):
     """
     Streamlit-блок генерации MP3.
-    rows — список выбранных строк из таблицы (список списков)
-    selected_indices — индексы выбранных строк (не обязательный)
+    rows — список выбранных строк (список списков)
+    pause_ms — пауза перед русским словом
+    file_lang — язык перевода файла
     """
     st.subheader("🎧 Генератор MP3")
 
@@ -79,7 +85,7 @@ def mp3_generator_block(user, rows, pause_ms=500, selected_indices=None):
 
     if st.button("▶️ Сгенерировать MP3"):
         with st.spinner("Генерация MP3..."):
-            mp3_buf = build_merged_mp3(rows, pause_ms=pause_ms)
+            mp3_buf = build_merged_mp3(rows, pause_ms=int(pause_ms*1000), file_lang=file_lang)
 
             # Сохраняем во временный файл для корректного воспроизведения st.audio
             with NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
